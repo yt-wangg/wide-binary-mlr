@@ -23,7 +23,7 @@ pip install .            # numpy and scipy only
 ```
 
 Most users know a star's absolute magnitude and colour, not its metallicity, so the main entry point is the
-colour–magnitude diagram. The fit gives the mass as a function of $(M_G, Z)$. At a position of the diagram the
+colour–magnitude diagram. In, the paper, the fit gives the mass as a function of $(M_G, Z)$. At a position of the diagram the
 wide-binary components of our sample have a distribution of calibrated metallicities $p(Z\mid M_G,\text{BP-RP})$, and
 the mass returned for that position is the posterior mass marginalised over it,
 $p(M\mid M_G,\text{BP-RP})=\int p(M\mid M_G,Z)\,p(Z\mid M_G,\text{BP-RP})\,dZ$:
