@@ -23,8 +23,8 @@ pip install .            # numpy and scipy only
 ```
 
 Most users know a star's absolute magnitude and colour, not its metallicity, so the main entry point is the
-colour–magnitude diagram. The metallicity is taken from the position of the star relative to the PARSEC main sequence
-(logAge = 9.6), and the mass follows from the relation at that metallicity:
+colour–magnitude diagram. The metallicity is the average calibrated metallicity $Z$ of the wide-binary components of
+our sample at that position of the diagram, and the mass follows from the relation at that metallicity:
 
 ```python
 import numpy as np
@@ -32,19 +32,20 @@ from wbmlr import MLR
 
 mlr = MLR()
 mg = np.array([5.0, 8.0, 11.0])                  # absolute G magnitude
-bp_rp = np.array([0.95, 1.75, 2.70])             # intrinsic (dereddened) BP-RP
-lo, med, hi = mlr.mass_from_cmd(mg, bp_rp, z_sigma=0.15)   # 16, 50, 84 per cent, in Msun
+bp_rp = np.array([0.87, 1.75, 2.70])             # intrinsic (dereddened) BP-RP
+lo, med, hi = mlr.mass_from_cmd(mg, bp_rp)       # 16, 50, 84 per cent, in Msun
+z, z_std = mlr.z_from_color(mg, bp_rp, return_std=True)
 ```
 
-`z_sigma` adds a Gaussian error of that size (dex) in the colour-based metallicity; 0.15 dex is the scatter between the
-colour-based and the spectroscopic metallicities of the calibration sample. If you have your own metallicity:
+`mass_from_cmd` also includes the spread of the metallicities of the sample stars at that position (`z_std`, typically
+0.1–0.15 dex) in the quantiles; pass `include_z_scatter=False` to leave it out. Positions with fewer than about 20
+effective sample stars return NaN. If you have your own metallicity:
 
 ```python
-z = mlr.z_from_color(mg, bp_rp)                  # colour-based Z (NaN outside the PARSEC colour range)
 mlr.mass(7.0, -0.2)                              # median mass for M_G and Z
-mlr.mass_quantiles(mg, z)                        # 16, 50, 84 per cent
-mlr.in_data_region(mg, z)                        # True where the fit is constrained by the data
-draws = mlr.mass_draws(mg, z)                    # (4000, 3) posterior draws
+mlr.mass_quantiles(mg, 0.0)                      # 16, 50, 84 per cent
+mlr.in_data_region(mg, 0.0)                      # True where the fit is constrained by the data
+draws = mlr.mass_draws(mg, 0.0)                  # (4000, 3) posterior draws
 total = draws.sum(axis=1)                        # correlated errors propagate correctly
 ```
 
@@ -54,19 +55,21 @@ If you prefer a table, interpolate `src/wbmlr/data/mlr_cmd_grid.csv` on $(M_G, \
 
 ## Metallicity
 
-`Z` is the metallicity on the PARSEC [M/H] scale, with the zero point anchored to the Sun. The colour-based `Z` of
-`z_from_color` is the metallicity at which the PARSEC main sequence has the colour of the star at its $M_G$, so it
-inherits the colour offsets between the models and the data. The mass depends on $Z$ much more weakly than on $M_G$
-(the relation differs from PARSEC mainly as a function of $M_G$), so the colour-based $Z$ is sufficient for most uses.
+`Z` is the calibrated metallicity $Z_j$ of the sample on a scale anchored to the Sun (the PARSEC [M/H] scale). The
+colour-based `Z` is the average $Z_j$ of the sample components in a window of 0.05 mag in $M_G$ and 0.02 mag in
+colour around the position, so it describes the population of our sample (single main-sequence stars in
+wide binaries within 1 kpc of the Sun). Because the colour is only a weak metallicity indicator compared with its
+scatter, `Z` varies slowly with colour, and `z_std` is large. For stars of a different population, such as clusters or
+the halo, a metallicity from spectroscopy is preferable. The mass depends on $Z$ much less than on $M_G$.
 
 ## Data files (`src/wbmlr/data`)
 
 | File | Content |
 |---|---|
-| `mlr_cmd_grid.csv` | Table on the colour–magnitude diagram: `MG` (step 0.05), intrinsic `BP_RP` (step 0.01) within the PARSEC colours for $-1\le Z\le0.6$, the implied `Z_cmd`, `mass_p16/p50/p84` (Msun) at `Z_cmd`, the median mass at `Z_cmd` $\mp0.15$ dex, and `in_data_region` (0/1) |
-| `mlr_grid.csv` | Table on a $0.05$ mag $\times$ $0.05$ dex $(M_G, Z)$ grid: `MG, Z, mass_p16, mass_p50, mass_p84` (Msun), `mass_parsec`, `delta_parsec_percent` (median relative to PARSEC at the same $Z$), `in_data_region` |
+| `mlr_cmd_grid.csv` | Table on the colour–magnitude diagram: `MG` (step 0.05), intrinsic `BP_RP` (step 0.01), the mean `Z_mean` and standard deviation `Z_std` of the calibrated metallicity of the sample stars there, their effective number `n_eff` ($\ge20$), `mass_p16/p50/p84` (Msun) at `Z_mean`, and `in_data_region` (0/1) |
+| `mlr_grid.csv` | Table on a $0.05$ mag $\times$ $0.05$ dex $(M_G, Z)$ grid: `MG, Z, mass_p16, mass_p50, mass_p84` (Msun), `mass_parsec`, `delta_parsec_percent` (median relative to PARSEC at the same $Z$), `in_data_region`, and the mean `bp_rp_mean`, scatter `bp_rp_std` and effective number `n_eff` of the intrinsic BP-RP of the sample stars with that $Z$ and $M_G$ (NaN where fewer than 20) |
 | `mlr_theta_draws.npz` | 4000 posterior draws of the $8\times4$ B-spline coefficients `theta` of $\log_{10}(M/M_\odot)$, plus `knots_x`, `knots_z`, degrees. $g(M_G,Z)=\sum_{ih}\theta_{ih}B_i(M_G)C_h(Z)$, cubic, clamped knots |
-| `parsec_color_grid.npz` | PARSEC (logAge 9.6) intrinsic BP-RP on a grid of $M_G$ and $Z$, used by `z_from_color` |
+| `cmd_empirical.npz` | The arrays behind `mlr_cmd_grid.csv`, used by `z_from_color` |
 | `data_coverage.npz` | Smoothed density of the sample components in $(M_G, Z)$ and the level enclosing 95 % of them |
 | `meta.json` | Provenance |
 

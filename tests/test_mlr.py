@@ -53,25 +53,33 @@ def test_data_region(mlr):
 
 
 def test_cmd_table_is_reproduced(mlr):
-    rows = list(csv.DictReader(open(DATA / "mlr_cmd_grid.csv")))[::997]
+    rows = list(csv.DictReader(open(DATA / "mlr_cmd_grid.csv")))[::401]
     mg = np.array([float(r["MG"]) for r in rows]); c = np.array([float(r["BP_RP"]) for r in rows])
-    z = mlr.z_from_color(mg, c)
-    assert np.allclose(z, [float(r["Z_cmd"]) for r in rows], atol=2e-3)
-    q = mlr.mass_from_cmd(mg, c)
+    z, zs = mlr.z_from_color(mg, c, return_std=True)
+    assert np.allclose(z, [float(r["Z_mean"]) for r in rows], atol=2e-3)
+    assert np.allclose(zs, [float(r["Z_std"]) for r in rows], atol=2e-3)
+    q = mlr.mass_from_cmd(mg, c, include_z_scatter=False)
     assert np.allclose(q[1], [float(r["mass_p50"]) for r in rows], rtol=2e-3)
-    assert np.all(mlr.mass(mg, z) > 0)
 
 
-def test_color_inversion_is_monotone_and_bounded(mlr):
-    c = np.linspace(0.9, 1.3, 41)
-    z = mlr.z_from_color(6.0, c)
-    ok = np.isfinite(z)
-    assert ok.any() and np.all(np.diff(z[ok]) > 0)       # redder at fixed M_G -> more metal-rich
-    assert np.all((z[ok] >= -1.0) & (z[ok] <= 0.6))
-    assert np.isnan(mlr.z_from_color(6.0, 0.3)) and np.isnan(mlr.z_from_color(2.0, 1.0))
+def test_cmd_support(mlr):
+    assert np.isfinite(mlr.z_from_color(8.0, 1.75))
+    assert np.isnan(mlr.z_from_color(8.0, 0.3)) and np.isnan(mlr.z_from_color(2.0, 1.0))
+    assert np.isnan(mlr.mass_from_cmd(8.0, 0.3)).all()
 
 
-def test_metallicity_error_widens_the_interval(mlr):
-    a = mlr.mass_from_cmd(8.0, 1.8)
-    b = mlr.mass_from_cmd(8.0, 1.8, z_sigma=0.15)
+def test_z_scatter_widens_the_interval(mlr):
+    a = mlr.mass_from_cmd(8.0, 1.75, include_z_scatter=False)
+    b = mlr.mass_from_cmd(8.0, 1.75)
     assert (b[2] - b[0]) > (a[2] - a[0])
+    assert abs(b[1] / a[1] - 1) < 0.03
+
+
+def test_colour_table_of_the_grid():
+    rows = [r for r in csv.DictReader(open(DATA / "mlr_grid.csv")) if r["bp_rp_mean"] != "nan"]
+    z = {}
+    for r in rows:
+        if abs(float(r["MG"]) - 8.0) < 1e-9:
+            z[float(r["Z"])] = float(r["bp_rp_mean"])
+    zs = sorted(z)
+    assert len(zs) > 5 and all(z[b] > z[a] for a, b in zip(zs[:-1], zs[1:]))   # redder when more metal-rich

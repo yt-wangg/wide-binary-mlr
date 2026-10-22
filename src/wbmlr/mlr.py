@@ -44,8 +44,10 @@ class MLR:
         c = np.load(DATA / "data_coverage.npz")
         self._cover = RegularGridInterpolator((c["z"], c["mg"]), c["density"], bounds_error=False, fill_value=0.0)
         self._level = float(c["level"])
-        g = np.load(DATA / "parsec_color_grid.npz")
-        self._cmg, self._cz, self._ccolor = g["mg"], g["z"], g["color"]   # PARSEC colour (n_mg, n_z)
+        e = np.load(DATA / "cmd_empirical.npz")
+        # mean and scatter of the calibrated metallicity of the sample stars on the colour--magnitude diagram
+        self._cmd_z = RegularGridInterpolator((e["mg"], e["color"]), e["z_mean"], bounds_error=False, fill_value=np.nan)
+        self._cmd_zstd = RegularGridInterpolator((e["mg"], e["color"]), e["z_std"], bounds_error=False, fill_value=np.nan)
 
     @property
     def n_draws(self) -> int:
@@ -83,44 +85,39 @@ class MLR:
         """Posterior median mass in solar masses."""
         return self.mass_quantiles(mg, z, q=(50,))[0]
 
-    def z_from_color(self, mg, bp_rp):
-        """Metallicity ``Z`` implied by a colour--magnitude position through the PARSEC main sequence.
+    def z_from_color(self, mg, bp_rp, return_std=False):
+        """Metallicity of the calibration stars at a position of the colour--magnitude diagram.
 
-        ``bp_rp`` must be the intrinsic (dereddened) ``BP-RP``. At fixed ``M_G`` the PARSEC colour increases
-        monotonically with metallicity (logAge = 9.6), and the relation is inverted over ``-1.0 <= Z <= 0.6``.
-        Positions bluer or redder than the PARSEC colours at the edges of that range return NaN.
-        Compared with the spectroscopic metallicities of the calibration sample the colour-based ``Z`` has a
-        scatter of about 0.15 dex, which is propagated by ``mass_from_cmd`` (``z_sigma``).
+        Returns the mean calibrated metallicity ``Z`` (and with ``return_std=True`` also its standard deviation) of
+        the wide-binary components of the sample within a small window around ``(M_G, BP-RP)`` (0.05 mag in
+        ``M_G`` and 0.02 mag in colour). ``bp_rp`` is the intrinsic (dereddened) ``BP-RP``. Positions with fewer
+        than about 20 effective sample stars return NaN. The mean is the expectation of ``Z`` given the position, so
+        it varies slowly with colour: the colour is only a weak metallicity indicator compared with its scatter.
         """
         mg, c = np.broadcast_arrays(np.asarray(mg, dtype=float), np.asarray(bp_rp, dtype=float))
-        out = np.full(mg.shape, np.nan)
-        ok = (mg >= MG_RANGE[0]) & (mg <= MG_RANGE[1])
-        idx = np.flatnonzero(ok.ravel())
-        mgf, cf = mg.ravel()[idx], c.ravel()[idx]
-        # colour of each Z node at the requested magnitudes (linear in M_G on the 0.01 mag grid)
-        cols = np.stack([np.interp(mgf, self._cmg, self._ccolor[:, j]) for j in range(self._cz.size)], axis=1)
-        z = np.array([np.interp(cf[i], cols[i], self._cz, left=np.nan, right=np.nan) for i in range(idx.size)])
-        res = out.ravel(); res[idx] = z
-        return res.reshape(mg.shape)
+        pts = np.stack([mg, c], axis=-1)
+        z = self._cmd_z(pts)
+        return (z, self._cmd_zstd(pts)) if return_std else z
 
-    def mass_from_cmd(self, mg, bp_rp, z_sigma=0.0, n=None, seed=0):
-        """Mass quantiles (16, 50, 84 per cent) of a star placed on the colour--magnitude diagram.
+    def mass_from_cmd(self, mg, bp_rp, include_z_scatter=True, n=None, seed=0):
+        """Mass quantiles (16, 50, 84 per cent) of a star at a position of the colour--magnitude diagram.
 
-        The metallicity is taken from the colour (:meth:`z_from_color`). With ``z_sigma > 0`` a Gaussian
-        uncertainty of that size (dex) in ``Z`` is added to the posterior draws (0.15 is typical for the colour-based
-        metallicity), so the quantiles include the metallicity error. Returns an array ``(3,) + shape``.
+        The metallicity is the mean of the calibration stars at that position (:meth:`z_from_color`). With
+        ``include_z_scatter`` the metallicity of each posterior draw is also drawn from a Gaussian with the
+        standard deviation of the calibration stars there (typically 0.1--0.15 dex), so the quantiles include the
+        spread of metallicities at fixed colour and magnitude. Returns an array ``(3,) + shape``.
         """
-        z = self.z_from_color(mg, bp_rp)
-        if z_sigma and z_sigma > 0:
-            rng = np.random.default_rng(seed)
-            nd = self.n_draws if n is None else min(int(n), self.n_draws)
-            zz = np.clip(z[None] + z_sigma * rng.standard_normal((nd,) + z.shape), Z_RANGE[0], Z_RANGE[1])
-            sel = np.random.default_rng(seed + 1).choice(self.n_draws, size=nd, replace=False)
-            bx = _basis(np.broadcast_to(np.asarray(mg, dtype=float), z.shape), self.knots_x, self.degree_x)
-            bz = _basis(zz, self.knots_z, self.degree_z)
-            g = np.einsum("...i,d...h,dih->d...", bx, bz, self.theta[sel])
-            return np.percentile(10.0 ** g, [16, 50, 84], axis=0)
-        return self.mass_quantiles(mg, z)
+        z, zs = self.z_from_color(mg, bp_rp, return_std=True)
+        if not include_z_scatter:
+            return self.mass_quantiles(mg, z)
+        nd = self.n_draws if n is None else min(int(n), self.n_draws)
+        rng = np.random.default_rng(seed)
+        zz = np.clip(z[None] + zs[None] * rng.standard_normal((nd,) + z.shape), Z_RANGE[0], Z_RANGE[1])
+        sel = np.random.default_rng(seed + 1).choice(self.n_draws, size=nd, replace=False)
+        bx = _basis(np.broadcast_to(np.asarray(mg, dtype=float), z.shape), self.knots_x, self.degree_x)
+        bz = _basis(zz, self.knots_z, self.degree_z)
+        g = np.einsum("...i,d...h,dih->d...", bx, bz, self.theta[sel])
+        return np.percentile(10.0 ** g, [16, 50, 84], axis=0)
 
     def in_data_region(self, mg, z):
         """True where the fit is constrained by the data.
