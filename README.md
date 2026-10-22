@@ -23,8 +23,10 @@ pip install .            # numpy and scipy only
 ```
 
 Most users know a star's absolute magnitude and colour, not its metallicity, so the main entry point is the
-colour–magnitude diagram. The metallicity is the average calibrated metallicity $Z$ of the wide-binary components of
-our sample at that position of the diagram, and the mass follows from the relation at that metallicity:
+colour–magnitude diagram. The fit gives the mass as a function of $(M_G, Z)$. At a position of the diagram the
+wide-binary components of our sample have a distribution of calibrated metallicities $p(Z\mid M_G,\text{BP-RP})$, and
+the mass returned for that position is the posterior mass marginalised over it,
+$p(M\mid M_G,\text{BP-RP})=\int p(M\mid M_G,Z)\,p(Z\mid M_G,\text{BP-RP})\,dZ$:
 
 ```python
 import numpy as np
@@ -37,9 +39,10 @@ lo, med, hi = mlr.mass_from_cmd(mg, bp_rp)       # 16, 50, 84 per cent, in Msun
 z, z_std = mlr.z_from_color(mg, bp_rp, return_std=True)
 ```
 
-`mass_from_cmd` also includes the spread of the metallicities of the sample stars at that position (`z_std`, typically
-0.1–0.15 dex) in the quantiles; pass `include_z_scatter=False` to leave it out. Positions with fewer than about 20
-effective sample stars return NaN. If you have your own metallicity:
+The quantiles therefore include the fit uncertainty and the spread of metallicities at that position (`z_std`,
+typically 0.1–0.15 dex). `z_from_color` returns the mean $Z$ and its standard deviation; `mass_from_cmd(...,
+marginalize=False)` evaluates the mass at the mean $Z$ only. Positions with fewer than about 20 effective sample
+stars return NaN. If you have your own metallicity:
 
 ```python
 mlr.mass(7.0, -0.2)                              # median mass for M_G and Z
@@ -66,10 +69,10 @@ the halo, a metallicity from spectroscopy is preferable. The mass depends on $Z$
 
 | File | Content |
 |---|---|
-| `mlr_cmd_grid.csv` | Table on the colour–magnitude diagram: `MG` (step 0.05), intrinsic `BP_RP` (step 0.01), the mean `Z_mean` and standard deviation `Z_std` of the calibrated metallicity of the sample stars there, their effective number `n_eff` ($\ge20$), `mass_p16/p50/p84` (Msun) at `Z_mean`, and `in_data_region` (0/1) |
+| `mlr_cmd_grid.csv` | Table on the colour–magnitude diagram: `MG` (step 0.05), intrinsic `BP_RP` (step 0.01), the mean `Z_mean` and standard deviation `Z_std` of the calibrated metallicity of the sample stars there, their effective number `n_eff` ($\ge20$), the marginalised `mass_p16/p50/p84` (Msun), `mass_p50_at_Z_mean` (median mass at `Z_mean` alone), and `in_data_region` (0/1) |
 | `mlr_grid.csv` | Table on a $0.05$ mag $\times$ $0.05$ dex $(M_G, Z)$ grid: `MG, Z, mass_p16, mass_p50, mass_p84` (Msun), `mass_parsec`, `delta_parsec_percent` (median relative to PARSEC at the same $Z$), `in_data_region`, and the mean `bp_rp_mean`, scatter `bp_rp_std` and effective number `n_eff` of the intrinsic BP-RP of the sample stars with that $Z$ and $M_G$ (NaN where fewer than 20) |
 | `mlr_theta_draws.npz` | 4000 posterior draws of the $8\times4$ B-spline coefficients `theta` of $\log_{10}(M/M_\odot)$, plus `knots_x`, `knots_z`, degrees. $g(M_G,Z)=\sum_{ih}\theta_{ih}B_i(M_G)C_h(Z)$, cubic, clamped knots |
-| `cmd_empirical.npz` | The arrays behind `mlr_cmd_grid.csv`, used by `z_from_color` |
+| `cmd_empirical.npz` | The arrays behind `mlr_cmd_grid.csv` and the functions: mean and standard deviation of $Z$, effective number, and the distribution `p_z` of $Z$ over the nodes `z_nodes` at each position |
 | `data_coverage.npz` | Smoothed density of the sample components in $(M_G, Z)$ and the level enclosing 95 % of them |
 | `meta.json` | Provenance |
 

@@ -58,8 +58,11 @@ def test_cmd_table_is_reproduced(mlr):
     z, zs = mlr.z_from_color(mg, c, return_std=True)
     assert np.allclose(z, [float(r["Z_mean"]) for r in rows], atol=2e-3)
     assert np.allclose(zs, [float(r["Z_std"]) for r in rows], atol=2e-3)
-    q = mlr.mass_from_cmd(mg, c, include_z_scatter=False)
-    assert np.allclose(q[1], [float(r["mass_p50"]) for r in rows], rtol=2e-3)
+    q = mlr.mass_from_cmd(mg, c, n=None)
+    for k, name in enumerate(("mass_p16", "mass_p50", "mass_p84")):
+        assert np.allclose(q[k], [float(r[name]) for r in rows], rtol=2e-3)
+    q0 = mlr.mass_from_cmd(mg, c, marginalize=False)
+    assert np.allclose(q0[1], [float(r["mass_p50_at_Z_mean"]) for r in rows], rtol=2e-3)
 
 
 def test_cmd_support(mlr):
@@ -68,11 +71,24 @@ def test_cmd_support(mlr):
     assert np.isnan(mlr.mass_from_cmd(8.0, 0.3)).all()
 
 
-def test_z_scatter_widens_the_interval(mlr):
-    a = mlr.mass_from_cmd(8.0, 1.75, include_z_scatter=False)
-    b = mlr.mass_from_cmd(8.0, 1.75)
+def test_marginalising_over_z_widens_the_interval(mlr):
+    a = mlr.mass_from_cmd(8.0, 1.75, marginalize=False)
+    b = mlr.mass_from_cmd(8.0, 1.75, n=None)
     assert (b[2] - b[0]) > (a[2] - a[0])
-    assert abs(b[1] / a[1] - 1) < 0.03
+    assert abs(b[1] / a[1] - 1) < 0.02
+
+
+def test_cmd_mass_is_the_mixture_over_the_metallicities(mlr):
+    # equals the average over the Z distribution of the (M_G, Z) relation, here at the table cell M_G=8, BP-RP=1.75
+    e = np.load(DATA / "cmd_empirical.npz")
+    i = int(np.argmin(abs(e["mg"] - 8.0))); j = int(np.argmin(abs(e["color"] - 1.75)))
+    p = e["p_z"][i, j]; assert np.isclose(p.sum(), 1.0, atol=1e-4)
+    draws = mlr.mass_draws(8.0, e["z_nodes"])                       # (draws, nodes)
+    rng = np.random.default_rng(0)
+    node = rng.choice(len(p), size=draws.shape[0], p=p / p.sum())
+    mix = np.percentile(draws[np.arange(draws.shape[0]), node], [16, 50, 84])
+    q = mlr.mass_from_cmd(8.0, 1.75, n=None)
+    assert np.allclose(mix, q, rtol=0.01)
 
 
 def test_colour_table_of_the_grid():

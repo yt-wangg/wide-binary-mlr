@@ -48,6 +48,9 @@ class MLR:
         # mean and scatter of the calibrated metallicity of the sample stars on the colour--magnitude diagram
         self._cmd_z = RegularGridInterpolator((e["mg"], e["color"]), e["z_mean"], bounds_error=False, fill_value=np.nan)
         self._cmd_zstd = RegularGridInterpolator((e["mg"], e["color"]), e["z_std"], bounds_error=False, fill_value=np.nan)
+        # distribution of Z over the nodes ``z_nodes`` of the sample stars at each colour-magnitude position
+        self._cmd_pz = RegularGridInterpolator((e["mg"], e["color"]), e["p_z"], bounds_error=False, fill_value=np.nan)
+        self._z_nodes = e["z_nodes"]
 
     @property
     def n_draws(self) -> int:
@@ -99,25 +102,38 @@ class MLR:
         z = self._cmd_z(pts)
         return (z, self._cmd_zstd(pts)) if return_std else z
 
-    def mass_from_cmd(self, mg, bp_rp, include_z_scatter=True, n=None, seed=0):
+    def mass_from_cmd(self, mg, bp_rp, marginalize=True, n=1000, seed=0):
         """Mass quantiles (16, 50, 84 per cent) of a star at a position of the colour--magnitude diagram.
 
-        The metallicity is the mean of the calibration stars at that position (:meth:`z_from_color`). With
-        ``include_z_scatter`` the metallicity of each posterior draw is also drawn from a Gaussian with the
-        standard deviation of the calibration stars there (typically 0.1--0.15 dex), so the quantiles include the
-        spread of metallicities at fixed colour and magnitude. Returns an array ``(3,) + shape``.
+        The fit gives the mass as a function of ``(M_G, Z)``. At a given position of the diagram the calibration stars
+        have a distribution of metallicities ``p(Z | M_G, BP-RP)``, and the mass returned here is the posterior mass
+        marginalised over it, ``p(M | M_G, BP-RP) = integral p(M | M_G, Z) p(Z | M_G, BP-RP) dZ``. The quantiles
+        therefore include both the fit uncertainty and the spread of metallicities at fixed colour and magnitude.
+        With ``marginalize=False`` the mass is evaluated at the mean metallicity only. ``n`` is the number of posterior
+        draws used (``None``: all 4000). Returns an array ``(3,) + shape``; NaN where the position is not supported.
         """
-        z, zs = self.z_from_color(mg, bp_rp, return_std=True)
-        if not include_z_scatter:
-            return self.mass_quantiles(mg, z)
-        nd = self.n_draws if n is None else min(int(n), self.n_draws)
-        rng = np.random.default_rng(seed)
-        zz = np.clip(z[None] + zs[None] * rng.standard_normal((nd,) + z.shape), Z_RANGE[0], Z_RANGE[1])
-        sel = np.random.default_rng(seed + 1).choice(self.n_draws, size=nd, replace=False)
-        bx = _basis(np.broadcast_to(np.asarray(mg, dtype=float), z.shape), self.knots_x, self.degree_x)
-        bz = _basis(zz, self.knots_z, self.degree_z)
-        g = np.einsum("...i,d...h,dih->d...", bx, bz, self.theta[sel])
-        return np.percentile(10.0 ** g, [16, 50, 84], axis=0)
+        mg, c = np.broadcast_arrays(np.asarray(mg, dtype=float), np.asarray(bp_rp, dtype=float))
+        if not marginalize:
+            return self.mass_quantiles(mg, self.z_from_color(mg, c))
+        sel = slice(None) if (n is None or n >= self.n_draws) else np.random.default_rng(seed).choice(
+            self.n_draws, size=int(n), replace=False)
+        theta = self.theta[sel]
+        pts = np.stack([mg, c], axis=-1).reshape(-1, 2)
+        pz = self._cmd_pz(pts)                                   # (points, nodes), NaN where unsupported
+        bz = _basis(self._z_nodes, self.knots_z, self.degree_z)  # (nodes, 4)
+        out = np.full((3, pts.shape[0]), np.nan)
+        qs = np.array([0.16, 0.5, 0.84])
+        for i in np.flatnonzero(np.all(np.isfinite(pz), axis=1) & (pz.sum(axis=1) > 0)):
+            m = pts[i, 0]
+            if not (MG_RANGE[0] <= m <= MG_RANGE[1]):
+                continue
+            bx = _basis(m, self.knots_x, self.degree_x)
+            masses = (10.0 ** np.einsum("i,bh,dih->db", bx, bz, theta)).ravel()      # (draws x nodes)
+            w = np.tile(pz[i] / pz[i].sum(), theta.shape[0])
+            order = np.argsort(masses)
+            cw = np.cumsum(w[order])
+            out[:, i] = masses[order][np.minimum(np.searchsorted(cw, qs * cw[-1]), masses.size - 1)]
+        return out.reshape((3,) + mg.shape)
 
     def in_data_region(self, mg, z):
         """True where the fit is constrained by the data.
