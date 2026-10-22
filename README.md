@@ -22,38 +22,52 @@ Xiong et al. 2023, Chevalier et al. 2023), shown on their own metallicity scales
 pip install .            # numpy and scipy only
 ```
 
+Most users know a star's absolute magnitude and colour, not its metallicity, so the main entry point is the
+colour–magnitude diagram. The metallicity is taken from the position of the star relative to the PARSEC main sequence
+(logAge = 9.6), and the mass follows from the relation at that metallicity:
+
 ```python
 import numpy as np
-from wbmlr import MLR, calibrate_metallicity
+from wbmlr import MLR
 
 mlr = MLR()
-mg = np.array([5.0, 8.0, 11.0])
-z = calibrate_metallicity(np.array([-0.1, 0.0, 0.1]), mg)   # raw J-CaPS [M/H] -> calibrated Z
-lo, med, hi = mlr.mass_quantiles(mg, z)                     # 16, 50, 84 per cent, in Msun
-ok = mlr.in_data_region(mg, z)
-
-draws = mlr.mass_draws(mg, z)                               # (4000, 3) posterior draws
-total = draws.sum(axis=1)                                   # correlated errors propagate correctly
+mg = np.array([5.0, 8.0, 11.0])                  # absolute G magnitude
+bp_rp = np.array([0.95, 1.75, 2.70])             # intrinsic (dereddened) BP-RP
+lo, med, hi = mlr.mass_from_cmd(mg, bp_rp, z_sigma=0.15)   # 16, 50, 84 per cent, in Msun
 ```
 
-`MLR.mass`, `mass_quantiles`, `mass_draws` and `log_mass_draws` take arrays of any shape (broadcast against each
-other). See `examples/example.py`.
+`z_sigma` adds a Gaussian error of that size (dex) in the colour-based metallicity; 0.15 dex is the scatter between the
+colour-based and the spectroscopic metallicities of the calibration sample. If you have your own metallicity:
 
-## Important: metallicity scale
+```python
+z = mlr.z_from_color(mg, bp_rp)                  # colour-based Z (NaN outside the PARSEC colour range)
+mlr.mass(7.0, -0.2)                              # median mass for M_G and Z
+mlr.mass_quantiles(mg, z)                        # 16, 50, 84 per cent
+mlr.in_data_region(mg, z)                        # True where the fit is constrained by the data
+draws = mlr.mass_draws(mg, z)                    # (4000, 3) posterior draws
+total = draws.sum(axis=1)                        # correlated errors propagate correctly
+```
 
-`Z` is the calibrated metallicity on the PARSEC [M/H] scale, **not** the raw J-CaPS value. A raw Gaia XP metallicity
-must be converted with `calibrate_metallicity(mh_jcaps, mg)`, which removes the magnitude-dependent J-CaPS bias
-$b_G(M_G)$ and anchors the zero point to the Sun. For spectroscopic metallicities on another scale the conversion is
-not defined, and the result is approximate.
+Functions take arrays of any shape (broadcast against each other). See `examples/example.py`.
+
+If you prefer a table, interpolate `src/wbmlr/data/mlr_cmd_grid.csv` on $(M_G, \text{BP-RP})$.
+
+## Metallicity
+
+`Z` is the metallicity on the PARSEC [M/H] scale, with the zero point anchored to the Sun. The colour-based `Z` of
+`z_from_color` is the metallicity at which the PARSEC main sequence has the colour of the star at its $M_G$, so it
+inherits the colour offsets between the models and the data. The mass depends on $Z$ much more weakly than on $M_G$
+(the relation differs from PARSEC mainly as a function of $M_G$), so the colour-based $Z$ is sufficient for most uses.
 
 ## Data files (`src/wbmlr/data`)
 
 | File | Content |
 |---|---|
-| `mlr_grid.csv` | Table on a $0.05$ mag $\times$ $0.05$ dex grid: `MG, Z, mass_p16, mass_p50, mass_p84` (Msun), `mass_parsec`, `delta_parsec_percent` (median relative to PARSEC at the same $Z$), `in_data_region` (0/1) |
+| `mlr_cmd_grid.csv` | Table on the colour–magnitude diagram: `MG` (step 0.05), intrinsic `BP_RP` (step 0.01) within the PARSEC colours for $-1\le Z\le0.6$, the implied `Z_cmd`, `mass_p16/p50/p84` (Msun) at `Z_cmd`, the median mass at `Z_cmd` $\mp0.15$ dex, and `in_data_region` (0/1) |
+| `mlr_grid.csv` | Table on a $0.05$ mag $\times$ $0.05$ dex $(M_G, Z)$ grid: `MG, Z, mass_p16, mass_p50, mass_p84` (Msun), `mass_parsec`, `delta_parsec_percent` (median relative to PARSEC at the same $Z$), `in_data_region` |
 | `mlr_theta_draws.npz` | 4000 posterior draws of the $8\times4$ B-spline coefficients `theta` of $\log_{10}(M/M_\odot)$, plus `knots_x`, `knots_z`, degrees. $g(M_G,Z)=\sum_{ih}\theta_{ih}B_i(M_G)C_h(Z)$, cubic, clamped knots |
+| `parsec_color_grid.npz` | PARSEC (logAge 9.6) intrinsic BP-RP on a grid of $M_G$ and $Z$, used by `z_from_color` |
 | `data_coverage.npz` | Smoothed density of the sample components in $(M_G, Z)$ and the level enclosing 95 % of them |
-| `jcaps_bias.csv` | Knots of the J-CaPS bias $b_G(M_G)$ (solar magnitude 4.66 for the zero point) |
 | `meta.json` | Provenance |
 
 ## What the uncertainties contain
@@ -76,7 +90,6 @@ pip install ".[test]" && pytest
 ## Citation
 
 Wang, Rix, Li & Ting (in prep.), *Dynamical calibration of a metallicity-dependent stellar mass–luminosity relation
-from Gaia wide binaries*. Please also cite the J-CaPS metallicities (Li et al. 2026) if you use `calibrate_metallicity`.
-
+from Gaia wide binaries*. 
 The files in `src/wbmlr/data` were produced from the analysis repository by `scripts/export_public_mlr.py`
 (https://github.com/yt-wangg/Dynamical-masses).

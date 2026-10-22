@@ -4,7 +4,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from wbmlr import MLR, calibrate_metallicity
+from wbmlr import MLR
 from wbmlr.mlr import DATA
 
 
@@ -52,6 +52,26 @@ def test_data_region(mlr):
     assert not bool(mlr.in_data_region(2.0, 0.0))
 
 
-def test_calibrate_metallicity():
-    assert np.isclose(calibrate_metallicity(0.1, 4.66), 0.1)           # zero bias at the solar magnitude
-    assert calibrate_metallicity(0.0, 11.0) > 0.0                      # b_G < 0 for faint stars
+def test_cmd_table_is_reproduced(mlr):
+    rows = list(csv.DictReader(open(DATA / "mlr_cmd_grid.csv")))[::997]
+    mg = np.array([float(r["MG"]) for r in rows]); c = np.array([float(r["BP_RP"]) for r in rows])
+    z = mlr.z_from_color(mg, c)
+    assert np.allclose(z, [float(r["Z_cmd"]) for r in rows], atol=2e-3)
+    q = mlr.mass_from_cmd(mg, c)
+    assert np.allclose(q[1], [float(r["mass_p50"]) for r in rows], rtol=2e-3)
+    assert np.all(mlr.mass(mg, z) > 0)
+
+
+def test_color_inversion_is_monotone_and_bounded(mlr):
+    c = np.linspace(0.9, 1.3, 41)
+    z = mlr.z_from_color(6.0, c)
+    ok = np.isfinite(z)
+    assert ok.any() and np.all(np.diff(z[ok]) > 0)       # redder at fixed M_G -> more metal-rich
+    assert np.all((z[ok] >= -1.0) & (z[ok] <= 0.6))
+    assert np.isnan(mlr.z_from_color(6.0, 0.3)) and np.isnan(mlr.z_from_color(2.0, 1.0))
+
+
+def test_metallicity_error_widens_the_interval(mlr):
+    a = mlr.mass_from_cmd(8.0, 1.8)
+    b = mlr.mass_from_cmd(8.0, 1.8, z_sigma=0.15)
+    assert (b[2] - b[0]) > (a[2] - a[0])
