@@ -9,6 +9,13 @@ relative motion of the two stars, not from stellar evolution models.
   monotonicity and priors, not by the data; `in_data_region` flags it.
 - Statistical uncertainty where the data are: 0.8–3.7 % in mass (median 1.9 %).
 
+![MLR in four bins of calibrated metallicity](docs/mlr_feh_bins.png)
+
+*The relation in four bins of the calibrated metallicity $Z$ (Fig. 6 of the paper). Upper panels: mass against $M_G$;
+lower panels: difference from PARSEC at the same $Z$. Solid line and bands: this work (68 and 95 % credible
+intervals); dashed line: PARSEC. Symbols are independent literature masses (Mann et al. 2019, Serenelli et al. 2017,
+Xiong et al. 2023, Chevalier et al. 2023), shown on their own metallicity scales.*
+
 ## Install and use
 
 ```bash
