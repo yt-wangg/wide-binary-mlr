@@ -1,0 +1,10 @@
+{
+  "n_posterior_draws": 4000,
+  "grid_draws": 4000,
+  "mg_step": 0.05,
+  "z_step": 0.05,
+  "jcaps_bias_anchor_mg": 4.66,
+  "coverage_fraction": 0.95,
+  "source_run": "results/ecc_shape_sensitivity_20261009/mu42_sigma23",
+  "fit": "alpha_e=1.233, outlier Gaussian mu=42 sigma=23, selection cut 3"
+}
