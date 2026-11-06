@@ -4,6 +4,7 @@
   "mg_step": 0.05,
   "z_step": 0.05,
   "coverage_fraction": 0.95,
-  "source_run": "results/ecc_shape_sensitivity_20261009/mu42_sigma23",
-  "fit": "alpha_e=1.233, outlier Gaussian mu=42 sigma=23, selection cut 3"
+  "source_run": "results/final_20261104/snr3_local/template",
+  "fit": "alpha_e=1.233; outlier component with local hidden-companion templates and fractions (logit f_j = logit f0 + beta * offset_j, f0 and beta free); selection 3 sigma_u < u < U_j (bound-orbit limit); R_chance_align <= 0.01; zero-point-corrected primary distance",
+  "n_pairs": 10559
 }

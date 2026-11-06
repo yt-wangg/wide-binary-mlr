@@ -1,17 +1,17 @@
 # wbmlr: a dynamical mass–luminosity relation from Gaia wide binaries
 
 Mass of a single main-sequence star as a function of its Gaia absolute magnitude $M_G$ and metallicity $Z$,
-calibrated dynamically with 14,876 wide binaries (Wang, Rix, Li & Ting, in prep.). The mass scale comes from the
+calibrated dynamically with 10,559 wide binaries (Wang, Rix, Li & Ting, in prep.). The mass scale comes from the
 relative motion of the two stars, not from stellar evolution models.
 
 - Domain: $3.5 \le M_G \le 13.5$ mag, $-1.0 \le Z \le 0.6$ dex (NaN outside).
-- Data region: $3.6 \lesssim M_G \lesssim 12.1$, $-0.5 \lesssim Z \lesssim 0.45$. Outside it the relation is set by
+- Data region: $3.7 \lesssim M_G \lesssim 11.8$, $-0.5 \lesssim Z \lesssim 0.4$. Outside it the relation is set by
   monotonicity and priors, not by the data; `in_data_region` flags it.
-- Statistical uncertainty where the data are: 0.8–3.7 % in mass (median 1.9 %).
+- Statistical uncertainty where the data are: 1.9–4.7 % in mass (median 2.5 %).
 
 ![MLR in four bins of calibrated metallicity](docs/mlr_feh_bins.png)
 
-*The relation in four bins of the calibrated metallicity $Z$ (Fig. 6 of the paper). Upper panels: mass against $M_G$;
+*The relation in four bins of the calibrated metallicity $Z$ (from the paper). Upper panels: mass against $M_G$;
 lower panels: difference from PARSEC at the same $Z$. Solid line and bands: this work (68 and 95 % credible
 intervals); dashed line: PARSEC. Symbols are independent literature masses (Mann et al. 2019, Serenelli et al. 2017,
 Xiong et al. 2023, Chevalier et al. 2023), shown on their own metallicity scales.*
@@ -23,7 +23,7 @@ pip install .            # numpy and scipy only
 ```
 
 Most users know a star's absolute magnitude and colour, not its metallicity, so the main entry point is the
-colour–magnitude diagram. In, the paper, the fit gives the mass as a function of $(M_G, Z)$. At a position of the diagram the
+colour–magnitude diagram. In the paper, the fit gives the mass as a function of $(M_G, Z)$. At a position of the diagram the
 wide-binary components of our sample have a distribution of calibrated metallicities $p(Z\mid M_G,\text{BP-RP})$, and
 the mass returned for that position is the posterior mass marginalised over it,
 $p(M\mid M_G,\text{BP-RP})=\int p(M\mid M_G,Z)\,p(Z\mid M_G,\text{BP-RP})\,dZ$:
@@ -78,11 +78,13 @@ the halo, a metallicity from spectroscopy is preferable. The mass depends on $Z$
 
 ## What the uncertainties contain
 
-The quantiles are statistical, from the posterior of the adopted fit (eccentricity index $\alpha_e=1.233$, outlier
-Gaussian with mean 42 and width 23 km s$^{-1}$ AU$^{1/2}$, selection cut $u/\sigma_u>3$). Further systematic effects
-(see the paper): the shape of $p(\tilde u)$, $\alpha_e=1.0$–$1.5$, changes the masses by 0.4–1.9 %; fitting the
-outlier mean and width as free parameters changes the masses by about 1 % at most but widens the uncertainty by
-8–60 %. At $M_G>10.5$ the individual dynamical masses in the literature lie 8–10 % below this relation.
+The quantiles are statistical, from the posterior of the adopted fit (eccentricity index $\alpha_e=1.233$; an
+outlier component for pairs with a hidden close companion, whose shape and fraction for each pair follow a forward model
+of such companions; selection $3\sigma_u<u<U_j$ including the bound-orbit limit of the catalogue). Further systematic
+effects (see the paper): fitting only the pairs with $u/\sigma_u>10$ raises the masses by up to 5 % at $M_G\le8$ and
+makes the metallicity dependence steeper by up to 0.03 in $\Delta\log_{10}M/\Delta Z$; the eccentricity distribution
+changes the masses by up to 2 %. At $M_G>10.5$ the individual dynamical masses in the literature lie about 17 % below
+this relation.
 
 The relation describes single main-sequence stars. It does not apply to unresolved binaries, pre-main-sequence
 stars or evolved stars.

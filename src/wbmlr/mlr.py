@@ -1,7 +1,7 @@
 """Dynamical mass--luminosity relation of single main-sequence stars from Gaia wide binaries.
 
 The relation is a monotone tensor-product cubic B-spline surface ``log10(M/Msun) = g(M_G, Z)`` with 8 x 4
-coefficients, fitted to the relative motion of 14,876 wide binaries (Wang et al., in prep.).  ``Z`` is the
+coefficients, fitted to the relative motion of 10,559 wide binaries (Wang et al., in prep.).  ``Z`` is the
 metallicity on the PARSEC [M/H] scale with the zero point anchored to the Sun.
 The posterior is stored as 4000 coefficient draws, so uncertainties can be propagated and are correlated
 between magnitudes and metallicities.
